@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from openai import OpenAI
-from serpapi import GoogleSearch  # <-- SerpApi
+from serpapi import GoogleSearch
 
 app = FastAPI()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -50,10 +50,8 @@ async def dialogflow_webhook(request: Request):
         user_text = query_result.get("queryText", "") or ""
         intent_name = (query_result.get("intent", {}) or {}).get("displayName", "") or ""
 
-        # ---- Ruta rápida: Ubicación / sucursales / cerca ----
         texto = user_text.lower()
         if any(k in texto for k in ["ubicación", "ubicacion", "dirección", "direccion", "sucursal", "cerca", "donde están", "dónde están"]):
-            # Por ahora usamos CDMX como ejemplo. Luego lo hacemos con colonia/CP o ubicación del usuario.
             lat, lon = 19.4326, -99.1332
             lugares = buscar_cerca("tortas", lat, lon)
 
@@ -61,7 +59,6 @@ async def dialogflow_webhook(request: Request):
                 "fulfillmentText": "Te dejo algunas opciones cercanas:\n" + "\n".join(lugares)
             })
 
-        # ---- Respuesta normal con OpenAI ----
         system = (
             "Eres un asistente para un negocio de tortas. Responde breve, claro y en español. "
             "Si falta un dato, pregunta. No inventes precios si no se te dieron."
