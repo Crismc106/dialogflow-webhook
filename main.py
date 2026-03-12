@@ -1,5 +1,4 @@
 import os
-import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from openai import OpenAI
@@ -7,45 +6,6 @@ from openai import OpenAI
 app = FastAPI()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-
-def geocodificar_direccion(direccion: str):
-    api_key = os.getenv("GOOGLE_MAPS_API_KEY")
-    if not api_key:
-        return {"ok": False, "error": "Falta GOOGLE_MAPS_API_KEY en Render."}
-
-    url = "https://maps.googleapis.com/maps/api/geocode/json"
-    params = {
-        "address": direccion,
-        "key": api_key,
-        "region": "mx",
-        "language": "es",
-    }
-
-    r = requests.get(url, params=params, timeout=20)
-    data = r.json()
-
-    status = data.get("status")
-    if status != "OK":
-        return {
-            "ok": False,
-            "error": f"Google Maps devolvió estado: {status}"
-        }
-
-    results = data.get("results", [])
-    if not results:
-        return {"ok": False, "error": "No encontré resultados para esa dirección."}
-
-    primero = results[0]
-    formatted_address = primero.get("formatted_address", direccion)
-    location = (primero.get("geometry", {}) or {}).get("location", {}) or {}
-
-    return {
-        "ok": True,
-        "formatted_address": formatted_address,
-        "lat": location.get("lat"),
-        "lng": location.get("lng"),
-    }
 
 
 @app.get("/")
@@ -73,6 +33,7 @@ async def dialogflow_webhook(request: Request):
                     return params.get(nombre_parametro)
             return None
 
+
         
         if intent_name == "Ubicacion":
             direccion = parameters.get("direccion") or obtener_parametro_contextos("direccion")
@@ -82,31 +43,18 @@ async def dialogflow_webhook(request: Request):
 
             direccion = (str(direccion).strip() if direccion else "")
 
-            if not direccion:
+            if direccion:
                 return JSONResponse({
                     "fulfillmentText": (
-                        "No pude identificar bien tu dirección. "
-                        "¿Me la escribes completa, por favor?"
+                        f"Perfecto, recibí tu dirección: {direccion}. "
+                        f"¿Deseas confirmar tu pedido?"
                     )
                 })
-
-            geo = geocodificar_direccion(direccion)
-
-            if not geo.get("ok"):
-                return JSONResponse({
-                    "fulfillmentText": (
-                        "No pude validar esa dirección. "
-                        "¿Me la escribes más completa, por favor? "
-                        "Por ejemplo: calle, número, colonia y ciudad."
-                    )
-                })
-
-            direccion_formateada = geo.get("formatted_address", direccion)
 
             return JSONResponse({
                 "fulfillmentText": (
-                    f"Perfecto, validé tu dirección como: {direccion_formateada}. "
-                    f"¿Deseas confirmar tu pedido?"
+                    "No pude identificar bien tu dirección. "
+                    "¿Me la escribes completa, por favor?"
                 )
             })
 
@@ -117,7 +65,8 @@ async def dialogflow_webhook(request: Request):
             "Responde breve, claro y en español. "
             "Ayuda al usuario a continuar con su pedido. "
             "Si falta un dato importante, pregúntalo. "
-            "No inventes precios ni promociones si no se te proporcionaron."
+            "No inventes precios ni promociones si no se te proporcionaron. "
+            "Si el usuario se sale del flujo, redirígelo de forma amable al pedido."
         )
 
         resp = client.chat.completions.create(
@@ -133,6 +82,7 @@ async def dialogflow_webhook(request: Request):
         )
 
         answer = (resp.choices[0].message.content or "").strip()
+
         if not answer:
             answer = "No logré entenderte bien. ¿Me lo repites, por favor?"
 
