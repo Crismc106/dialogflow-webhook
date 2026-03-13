@@ -33,15 +33,13 @@ async def dialogflow_webhook(request: Request):
                     return params.get(nombre_parametro)
             return None
 
-
-        
         if intent_name == "Ubicacion":
             direccion = parameters.get("direccion") or obtener_parametro_contextos("direccion")
 
             if isinstance(direccion, list):
                 direccion = " ".join(str(x) for x in direccion if x)
 
-            direccion = (str(direccion).strip() if direccion else "")
+            direccion = str(direccion).strip() if direccion else ""
 
             if direccion:
                 return JSONResponse({
@@ -58,35 +56,38 @@ async def dialogflow_webhook(request: Request):
                 )
             })
 
+        if intent_name == "Default Fallback Intent":
+            system = (
+                "Eres un asistente para un negocio de tortas y tacos. "
+                "Responde breve, claro y en español. "
+                "Ayuda al usuario a continuar con su pedido. "
+                "Si falta un dato importante, pregúntalo. "
+                "No inventes precios ni promociones si no se te proporcionaron. "
+                "Si el usuario se sale del flujo, redirígelo de forma amable al pedido."
+            )
 
-        
-        system = (
-            "Eres un asistente para un negocio de tortas y tacos. "
-            "Responde breve, claro y en español. "
-            "Ayuda al usuario a continuar con su pedido. "
-            "Si falta un dato importante, pregúntalo. "
-            "No inventes precios ni promociones si no se te proporcionaron. "
-            "Si el usuario se sale del flujo, redirígelo de forma amable al pedido."
-        )
+            resp = client.chat.completions.create(
+                model="gpt-4.1-mini",
+                temperature=0.6,
+                messages=[
+                    {"role": "system", "content": system},
+                    {
+                        "role": "user",
+                        "content": user_text
+                    }
+                ],
+            )
 
-        resp = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            temperature=0.6,
-            messages=[
-                {"role": "system", "content": system},
-                {
-                    "role": "user",
-                    "content": f"Intent detectado: {intent_name}\nMensaje del usuario: {user_text}"
-                }
-            ],
-        )
+            answer = (resp.choices[0].message.content or "").strip()
 
-        answer = (resp.choices[0].message.content or "").strip()
+            if not answer:
+                answer = "No logré entenderte bien. ¿Me lo repites, por favor?"
 
-        if not answer:
-            answer = "No logré entenderte bien. ¿Me lo repites, por favor?"
+            return JSONResponse({"fulfillmentText": answer})
 
-        return JSONResponse({"fulfillmentText": answer})
+        return JSONResponse({
+            "fulfillmentText": "Entendido."
+        })
 
     except Exception as e:
         print("ERROR EN WEBHOOK:", e)
