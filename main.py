@@ -1,4 +1,5 @@
 import os
+import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from openai import OpenAI
@@ -36,7 +37,6 @@ async def dialogflow_webhook(request: Request):
                     return params.get(nombre_parametro)
             return None
 
-        # Intent de ubicación
         if intent_name == "Ubicacion":
             direccion = parameters.get("direccion") or obtener_parametro_contextos("direccion")
 
@@ -60,27 +60,34 @@ async def dialogflow_webhook(request: Request):
                 )
             })
 
-        # Solo usar Gemini en el Default Fallback Intent
         if intent_name == "Default Fallback Intent":
             system = (
                 "Eres un asistente para un negocio de tortas y tacos. "
                 "Responde breve, claro y en español. "
                 "Ayuda al usuario a continuar con su pedido. "
                 "Si falta un dato importante, pregúntalo. "
-                "No inventes precios, promociones ni disponibilidad si no se te dieron. "
-                "Si el usuario se sale del flujo, redirígelo de forma amable al pedido."
+                "No inventes precios, promociones ni disponibilidad si no se te dieron."
             )
 
             resp = client.chat.completions.create(
                 model="gemini-2.5-flash",
-                temperature=0.6,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": user_text}
                 ],
             )
 
-            answer = (resp.choices[0].message.content or "").strip()
+            answer = ""
+            if resp.choices and resp.choices[0].message:
+                content = resp.choices[0].message.content
+                if isinstance(content, str):
+                    answer = content.strip()
+                elif isinstance(content, list):
+                    partes = []
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            partes.append(item.get("text", ""))
+                    answer = " ".join(partes).strip()
 
             if not answer:
                 answer = "No logré entenderte bien. ¿Me lo repites, por favor?"
@@ -90,7 +97,8 @@ async def dialogflow_webhook(request: Request):
         return JSONResponse({"fulfillmentText": "Entendido."})
 
     except Exception as e:
-        print("ERROR EN WEBHOOK:", e)
+        print("ERROR EN WEBHOOK:", repr(e))
+        traceback.print_exc()
         return JSONResponse({
-            "fulfillmentText": "Tuve un error al responder. Intenta de nuevo."
+            "fulfillmentText": f"Error temporal: {str(e)}"
         })
