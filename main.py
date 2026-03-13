@@ -5,7 +5,10 @@ from openai import OpenAI
 
 app = FastAPI()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(
+    api_key=os.getenv("GEMINI_API_KEY"),
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
 
 
 @app.get("/")
@@ -33,6 +36,7 @@ async def dialogflow_webhook(request: Request):
                     return params.get(nombre_parametro)
             return None
 
+        # Intent de ubicación
         if intent_name == "Ubicacion":
             direccion = parameters.get("direccion") or obtener_parametro_contextos("direccion")
 
@@ -56,25 +60,23 @@ async def dialogflow_webhook(request: Request):
                 )
             })
 
+        # Solo usar Gemini en el Default Fallback Intent
         if intent_name == "Default Fallback Intent":
             system = (
                 "Eres un asistente para un negocio de tortas y tacos. "
                 "Responde breve, claro y en español. "
                 "Ayuda al usuario a continuar con su pedido. "
                 "Si falta un dato importante, pregúntalo. "
-                "No inventes precios ni promociones si no se te proporcionaron. "
+                "No inventes precios, promociones ni disponibilidad si no se te dieron. "
                 "Si el usuario se sale del flujo, redirígelo de forma amable al pedido."
             )
 
             resp = client.chat.completions.create(
-                model="gpt-4.1-mini",
+                model="gemini-2.5-flash",
                 temperature=0.6,
                 messages=[
                     {"role": "system", "content": system},
-                    {
-                        "role": "user",
-                        "content": user_text
-                    }
+                    {"role": "user", "content": user_text}
                 ],
             )
 
@@ -85,9 +87,7 @@ async def dialogflow_webhook(request: Request):
 
             return JSONResponse({"fulfillmentText": answer})
 
-        return JSONResponse({
-            "fulfillmentText": "Entendido."
-        })
+        return JSONResponse({"fulfillmentText": "Entendido."})
 
     except Exception as e:
         print("ERROR EN WEBHOOK:", e)
